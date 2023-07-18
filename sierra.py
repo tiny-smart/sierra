@@ -1,4 +1,4 @@
-# Pytorch implementation for `Robust Bilateral Feature Upsampling'
+# Pytorch implementation for `SIERRA: A robust bilateral feature upsampler for dense prediction'
 # requirements:
 # 1.Pytorch
 # 2.mmcv
