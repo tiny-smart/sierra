@@ -82,26 +82,6 @@ class SIERRASp(nn.Module):
         return carafe(x, kernels, self.kernel_size, 1, self.scale)
 
 
-class GGNN(nn.Module):
-    def __init__(self, scale=2, kernel_size=3):
-        super().__init__()
-        assert isinstance(scale, int) and scale >= 2, \
-            'scale must be integers and greater than 2'
-        assert isinstance(kernel_size, int) and kernel_size >= 3 and kernel_size % 2 == 1, \
-            'kernel size must be odd integers and greater than 3'
-        self.scale = scale
-        self.kernel_size = kernel_size
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        mean = torch.mean(x, dim=1, keepdim=True)
-        grad = F.unfold(mean, kernel_size=self.kernel_size,
-                        padding=self.kernel_size // 2).view(B, self.kernel_size ** 2, H, W) - mean
-        grad = 1 / (grad ** 2 + 0.2)
-        kernels = F.softmax(F.interpolate(grad, scale_factor=self.scale), dim=1)
-        return carafe(x, kernels, self.kernel_size, 1, self.scale)
-
-
 class GGBilinear(nn.Module):
     def __init__(self):
         super().__init__()
@@ -128,58 +108,6 @@ class GGBilinear(nn.Module):
         x = F.unfold(x, kernel_size=2, padding=1).view(B, C, 4, 1, H + 1, W + 1)
         return F.pad(F.pixel_shuffle(torch.sum(kernels * x, dim=2),
                                      upscale_factor=2).squeeze(2), pad=[-1] * 4)
-
-
-class GGCARAFE(nn.Module):
-    def __init__(self,
-                 channels,
-                 scale_factor,
-                 up_kernel=3,
-                 up_group=1,
-                 encoder_kernel=3,
-                 encoder_dilation=1,
-                 compressed_channels=64):
-        super(GGCARAFE, self).__init__()
-        self.channels = channels
-        self.scale_factor = scale_factor
-        self.up_kernel = up_kernel
-        self.up_group = up_group
-        self.encoder_kernel = encoder_kernel
-        self.encoder_dilation = encoder_dilation
-        self.compressed_channels = compressed_channels
-        self.channel_compressor = nn.Conv2d(channels, self.compressed_channels,
-                                            1)
-        self.content_encoder = nn.Conv2d(
-            self.compressed_channels,
-            self.up_kernel * self.up_kernel * self.up_group *
-            self.scale_factor * self.scale_factor,
-            self.encoder_kernel,
-            padding=int((self.encoder_kernel - 1) * self.encoder_dilation / 2),
-            dilation=self.encoder_dilation,
-            groups=1)
-        self.init_weights()
-
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                xavier_init(m, distribution='uniform')
-        normal_init(self.content_encoder, std=0.001)
-
-    def feature_reassemble(self, x, mask):
-        x = carafe(x, mask, self.up_kernel, self.up_group, self.scale_factor)
-        return x
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        mean = torch.mean(x, dim=1, keepdim=True)
-        grad = F.unfold(mean, kernel_size=self.up_kernel,
-                        padding=self.up_kernel // 2).view(B, self.up_kernel ** 2, H, W) - mean
-        grad = 1 / (grad ** 2 + 0.2).unsqueeze(2)
-        kernels = self.content_encoder(self.channel_compressor(x)).view(
-            B, self.up_kernel ** 2, self.scale_factor ** 2, H, W)
-        mask = F.softmax(F.pixel_shuffle(grad * kernels, upscale_factor=self.scale_factor).squeeze(2), dim=1)
-        x = self.feature_reassemble(x, mask)
-        return x
 
 
 if __name__ == '__main__':
