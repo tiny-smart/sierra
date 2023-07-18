@@ -2,7 +2,7 @@
 # requirements:
 # 1.Pytorch
 # 2.mmcv
-# Usage set below for directly running this script.
+# Usage is set below for directly running this script.
 
 import numpy as np
 import torch
